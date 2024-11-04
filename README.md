@@ -1,1 +1,3 @@
-# EI-low-RNN
+# EI-subspace-RNN
+
+Rotation with Lea
