@@ -1,4 +1,4 @@
-name: base
+name: EI_subspace_RNN
 channels:
   - defaults
 dependencies:
