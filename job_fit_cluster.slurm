@@ -16,4 +16,4 @@ echo "Executing on the machine:" $(hostname)
 module purge
 module load anaconda3/2023.3
 
-python fit_cluster_RNN.py
+python fit_cluster_RNN_fixed_N_K.py
