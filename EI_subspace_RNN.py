@@ -3,6 +3,7 @@ import scipy.stats as stats
 from numpy.random import Generator, PCG64
 import utils
 from scipy.optimize import minimize, Bounds
+import sys
 
 class EI_subspace_RNN():
     """
@@ -182,11 +183,11 @@ class EI_subspace_RNN():
         d = np.random.normal(3, 1, (D,1))
 
         mu0 = np.random.normal(0, 0.1, (K,1))
-        Q0 = np.random.normal(0.5, 0.1, (K, K))
+        Q0 = np.random.normal(0.3, 0.1, (K, K))
         Q0 = np.dot(Q0, Q0.T) # to make P.S.D
         Q0 = 0.5 * (Q0 + Q0.T) # to make symmetric
 
-        R = np.random.normal(1, 0.25, (D, D))
+        R = np.random.normal(0.25, 0.25, (D, D))
         R = np.dot(R, R.T)
         R = 0.5 * (R + R.T)
         
@@ -243,23 +244,33 @@ class EI_subspace_RNN():
         mu_prior = np.zeros((T, self.K, 1))
         V = np.zeros((T, self.K, self.K))
         V_prior = np.zeros((T, self.K, self.K))
+        norm_fact = np.zeros((T))
         
         # first step
         mu_prior[0] = mu0
         V_prior[0] = Q0
         V[0] = np.linalg.inv(C_.T @ np.linalg.inv(R) @ C_  + np.linalg.inv(V_prior[0]))
         mu[0] = V[0] @ (C_.T @ np.linalg.inv(R) @ (y[0] - d) + np.linalg.inv(V_prior[0]) @ mu_prior[0])
-        
+        # - 0.5 * (2 * np.pi) ** self.K
+        norm_fact[0] =  - 0.5 * np.log(np.linalg.det(V_prior[0])) - 0.5 * (y[0] - C_ @ mu_prior[0] - d).T @ np.linalg.inv(C_ @ V_prior[0] @ C_.T + R) @ (y[0] - C_ @ mu_prior[0] - d)
+
         for t in range (1,T):
             # prior update
             mu_prior[t] = A @ mu[t-1] + b[t-1 >= t_s]
             V_prior[t] = A @ V[t-1] @ A.T + Q
 
+            # normalizing factor = log p(y_t|y_{1:t-1}) 
+            # ignoring - 0.5 * K * np.log(2 * np.pi)
+            norm_fact[t] = - 0.5 * np.log(np.linalg.det(C_ @ V_prior[t] @ C_.T + R)) - 0.5 * (y[t] - C_ @ mu_prior[t] - d).T @ np.linalg.inv(C_ @ V_prior[t] @ C_.T + R) @ (y[t] - C_ @ mu_prior[t] - d)
+        
             # filter update
             V[t] = np.linalg.inv(C_.T @ np.linalg.inv(R) @ C_  + np.linalg.inv(V_prior[t]))
             mu[t] = V[t] @ (C_.T @ np.linalg.inv(R) @ (y[t] - d) + np.linalg.inv(V_prior[t]) @ mu_prior[t])
 
-        return mu, mu_prior, V, V_prior
+        # marginal log likelihood p(y_{1:T})
+        ll = norm_fact.sum()
+
+        return mu, mu_prior, V, V_prior, ll
 
     def Kalman_smoother_E_step(self, A, mu, mu_prior, V, V_prior):
         ''' 
@@ -319,6 +330,8 @@ class EI_subspace_RNN():
         mu0 = np.mean(m, axis=0)[0]
         Q0 = np.mean(cov, axis=0)[0] + 1/U * M_first - mu0 @ mu0.T
 
+        if np.linalg.cond(M1 @ M1.T - T * U * M1_T) > 10**12:
+            print('BAD')
         # updates observation parameters
         C_ = (Y1 @ M1.T - T * U * Y_tilda) @ np.linalg.inv(M1 @ M1.T - T * U * M1_T)
         d = 1/(T*U) * (Y1 - C_ @ M1)
@@ -375,7 +388,6 @@ class EI_subspace_RNN():
         grad_W = grad_W + gamma * W
         
         return self.get_nonzero_weight_vector(grad_W).flatten() # a sign switching has to happen again
-        
 
     def loss_weights_M_step(self, w_flattened, s, b, m, cov, cov_next, alpha=1, beta=1):
         '''
@@ -478,11 +490,36 @@ class EI_subspace_RNN():
         loss1_W = loss1_W - 1/s * - 0.5 * np.trace(A.T @ J_aux @ A @ M1_T1)
         loss1_W = loss1_W - 1/s * np.trace(J_aux @ A @ M_next)
 
-        # negative complete data log likelihood term
+        # regularization terms
         loss2_W =  0.5  * np.trace(Jpinv_aux @ Jpinv_aux.T)
         loss3_W = 0.5 * np.ones((self.N,1)).T @ W.T @ W @ np.ones((self.N,1)) 
 
         return loss1_W, loss2_W, loss3_W[0,0]
+
+    def compute_ELBO(self, y, w, b, s, mu0, Q0, C_, d, R, m, cov, cov_next):
+
+        U = m.shape[0]
+        T = m.shape[1]
+        t_s = int(T/2)
+        R_inv = np.linalg.inv(R)
+        Q0_inv = np.linalg.inv(Q0)
+        Q = self.build_dynamics_covariance(s)
+        Q_inv = np.linalg.inv(Q)
+        W = self.build_full_weight_matrix(w)
+        A = utils.build_dynamics_matrix_A(W, self.J)
+
+        ecll = 0
+        for u in range(U):
+            ecll +=  -0.5 * np.log(np.linalg.det(Q0)) + m[u,0].T @ Q0_inv @ mu0 - 0.5 * mu0.T @ Q0_inv @ mu0 - 0.5 * np.trace(Q0_inv @ (cov[u,0] + m[u,0] @ m[u,0].T))
+            for t in range(T):
+                ecll += - 0.5 * np.log(np.linalg.det(R)) - 0.5 * (y[u,t] - d).T @ R_inv @ (y[u,t] - d) + m[u,t].T @ C_.T @ R_inv @ (y[u,t] - d) - 0.5 * np.trace(C_.T @ R_inv @ C_ @ (cov[u,t] + m[u,t] @ m[u,t].T))
+                if t!= 0:
+                    b_ = b[t-1 >= t_s]
+                    ecll += - 0.5 * np.log(np.linalg.det(Q)) - 0.5 * b_.T @ Q_inv @ b_ - 0.5 * np.trace(Q_inv @ (cov[u,t] + m[u,t] @ m[u,t].T)) \
+                    - 0.5 * np.trace(A.T @ Q_inv @ A @ (cov[u,t-1] + m[u,t-1] @ m[u,t-1].T)) + np.trace(Q_inv @ A @ (cov_next[u, t-1] + m[u,t-1] @ m[u,t].T)) \
+                    + (m[u,t].T - m[u,t-1].T @ A.T) @ Q_inv @ b_
+        elbo = ecll + 0
+        return ecll, elbo
 
     def fit_EM(self, y, init_w, init_b, init_s, init_mu0, init_Q0, init_C_, init_d, init_R, alpha=1, beta=1, max_iter=300):
         
@@ -496,19 +533,15 @@ class EI_subspace_RNN():
         C_ = np.copy(init_C_)
         d = np.copy(init_d)
         R = np.copy(init_R)
-
-        # first time point - check loss
-        W = self.build_full_weight_matrix(w)
-        A = utils.build_dynamics_matrix_A(W, self.J)
-        m = np.zeros((U, T, self.K, 1))
-        cov = np.zeros((U, T, self.K, self.K))
-        cov_next = np.zeros((U, T-1, self.K, self.K))
-        for u in range(U): # iterate across all trials
-            # E-step
-            mu, mu_prior, V, V_prior = self.Kalman_filter_E_step(y[u], w, b, s, mu0, Q0, C_, d, R)
-            m[u], cov[u], cov_next[u] = self.Kalman_smoother_E_step(A, mu, mu_prior, V, V_prior)
+        
+        # marginal log likelihood 
+        ecll = np.zeros((max_iter+1))
+        ll = np.zeros((max_iter+1, U))
         loss_W = np.zeros((max_iter+1, 3))
-        loss_W[0,:] = self.check_loss_weights(w, b, s, m, cov, cov_next)
+
+        C_all = np.ma.empty((max_iter+1), dtype=object)
+        d_all = np.ma.empty((max_iter+1), dtype=object)
+        R_all = np.ma.empty((max_iter+1), dtype=object)
 
         for iter in range(max_iter):
             # if iter % 10 == 0:
@@ -523,11 +556,14 @@ class EI_subspace_RNN():
 
             for u in range(U): # iterate across all trials
                 # E-step
-                mu, mu_prior, V, V_prior = self.Kalman_filter_E_step(y[u], w, b, s, mu0, Q0, C_, d, R)
+                mu, mu_prior, V, V_prior, ll[iter, u] = self.Kalman_filter_E_step(y[u], w, b, s, mu0, Q0, C_, d, R)
                 m[u], cov[u], cov_next[u] = self.Kalman_smoother_E_step(A, mu, mu_prior, V, V_prior)
+        
+            ecll[iter], _ = self.compute_ELBO(y, w, b, s, mu0, Q0, C_, d, R, m, cov, cov_next)
+            loss_W[iter,:] = self.check_loss_weights(w, b, s, m, cov, cov_next)
 
-            # checking - M-step separate just for one
-            # _, _, _, _, _, _, _ = self.closed_form_M_step(y, w, m, cov, cov_next)
+            # # # checking - M-step separate just for one
+            # _, _, _, _, C_, d, R = self.closed_form_M_step(y, w, m, cov, cov_next)
 
             # M-step
             b, s, mu0, Q0, C_, d, R = self.closed_form_M_step(y, w, m, cov, cov_next)
@@ -536,9 +572,20 @@ class EI_subspace_RNN():
             bounds = [(0, np.inf)] * init_w.shape[0]
             w = minimize(opt_fun, w.flatten(), jac=opt_grad, method='L-BFGS-B', bounds=bounds).x 
 
-            loss_W[iter+1,:] = self.check_loss_weights(w, b, s, m, cov, cov_next)
+        # compute loss and ecll and ll after last iteration
+        W = self.build_full_weight_matrix(w)
+        A = utils.build_dynamics_matrix_A(W, self.J)
+        m = np.zeros((U, T, self.K, 1))
+        cov = np.zeros((U, T, self.K, self.K))
+        cov_next = np.zeros((U, T-1, self.K, self.K))
+        for u in range(U): # iterate across all trials
+            # E-step
+            mu, mu_prior, V, V_prior, ll[-1, u] = self.Kalman_filter_E_step(y[u], w, b, s, mu0, Q0, C_, d, R)
+            m[u], cov[u], cov_next[u] = self.Kalman_smoother_E_step(A, mu, mu_prior, V, V_prior)
+        loss_W[-1,:] = self.check_loss_weights(w, b, s, m, cov, cov_next)
+        ecll[-1], _ = self.compute_ELBO(y, w, b, s, mu0, Q0, C_, d, R, m, cov, cov_next)
             
-        return loss_W, w, b, s, mu0, Q0, C_, d, R
+        return ecll, ll, loss_W, w, b, s, mu0, Q0, C_, d, R
 
 
 
