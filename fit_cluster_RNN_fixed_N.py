@@ -18,11 +18,11 @@ for K in [1,2,3,4,5,10,25,48]:
         df.loc[z, 'simulation'] = simulation
         z += 1 
 
-idx = 0 #int(os.environ["SLURM_ARRAY_TASK_ID"])
+idx = int(os.environ["SLURM_ARRAY_TASK_ID"])
 K = df.loc[idx, 'K']
 simulation = df.loc[idx, 'simulation']
 
-N_e = 2 #100
+N_e = 100
 N_i = N_e
 N = N_e + N_i
 D = 50
