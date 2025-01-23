@@ -10,9 +10,9 @@ import matplotlib.pyplot as plt
 import sys
 import os
 
-df = pd.DataFrame(columns=['K','simulation']) # in total z=0,209 
+df = pd.DataFrame(columns=['K','simulation']) # in total z=0,239 
 z = 0 
-for K in [2,3,4,5,10,25,40]:
+for K in [1,2,3,4,5,10,25,40]:
     for simulation in range(30):
         df.loc[z, 'K'] = K
         df.loc[z, 'simulation'] = simulation
