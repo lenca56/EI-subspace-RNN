@@ -132,7 +132,7 @@ def plot_dynamics_initialization_error(axes, trueA, initW, j_values=[0,1]):
         color = generate_random_color()
         for j in j_values:
             initA = build_dynamics_matrix_A(initW[j, simulation], J[j, simulation])
-            axes[0].scatter(j, mse(initA, trueA), color=color)
+            axes[0].scatter(j, mse(initA, trueA[j, simulation]), color=color)
             axes[1].scatter(j, mse(np.linalg.eigvals(initA).reshape(1,initA.shape[0]), np.linalg.eigvals(trueA[j,simulation]).reshape(1,initA.shape[0])), color=color)
 
             axes[0].set_xticks(j_values, J_possibility_title[j_values])
