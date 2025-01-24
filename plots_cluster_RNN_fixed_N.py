@@ -5,6 +5,9 @@ import scipy.linalg
 from utils import *
 from plotting_utils import *
 import matplotlib.pyplot as plt
+import sys
+import os
+
 colormap = ['tab:purple','tab:pink','tab:cyan','yellowgreen', 'olive']
 
 idx = int(os.environ["SLURM_ARRAY_TASK_ID"])
