@@ -82,3 +82,36 @@ def angle_vectors(v1, v2):
     angle_rad = np.arccos(cos_angle)
     return np.rad2deg(angle_rad)
 
+def norm_complex_scalar(eig):
+    eig_norms = np.zeros((eig.shape[0]))
+    for i in range(eig_norms.shape[0]):
+        eig_norms[i] = np.sqrt(np.real(eig[i])**2 + np.imag(eig[i])**2)
+    return eig_norms
+
+def projection_on_vector(v,u):
+    ''' 
+    projecting v on u
+    '''
+    return np.dot(u,v)/ (np.linalg.norm(u) ** 2) * u, np.dot(u,v)/ np.linalg.norm(u)
+
+def projection_on_subspace(v,U):
+    ''' 
+    projecting v on U, U orthogonal
+    '''
+    v_proj = np.linalg.pinv(U) @ U @ v
+    angle = angle_vectors(v, v_proj)
+    return v_proj, angle
+
+# TO CHECK!!!
+def covariance_alignment(v, J, B):
+    # project network on low-dim PC space
+    cov_network = v.T @ v
+    proj_v = v @ B
+    cov_PCA = proj_v.T @ proj_v
+
+    proj_J = J @ v.T
+    cov_J = proj_J @ proj_J.T
+    
+    return np.trace(cov_J) / np.trace(cov_network), np.trace(cov_PCA)/np.trace(cov_network)
+
+

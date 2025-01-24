@@ -3,6 +3,12 @@ from utils import *
 import numpy as np
 import EI_subspace_RNN
 
+def generate_random_color():
+  r = np.random.uniform(0, 1, 1)[0]
+  g = np.random.uniform(0, 1, 1)[0]
+  b = np.random.uniform(0, 1, 1)[0]
+  return (r, g, b)
+
 def plot_mse_parameters(axes, A, b, s, mu0, Q0, C_, d, R, true_A, true_b, true_s, true_mu0, true_Q0, true_C_, true_d, true_R):
     axes.set_ylabel('mse')
     # axes.set_ylim(0,0.001)
