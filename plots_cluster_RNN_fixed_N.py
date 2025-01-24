@@ -207,7 +207,7 @@ def plot_fit_dynamics_error(axes, trueA, fitW, j_values=[0,1]):
         for j in j_values:
             fitA = build_dynamics_matrix_A(fitW[j, simulation], J[j, simulation])
 
-            axes[0].scatter(j, mse(fitA, trueA), color=color)
+            axes[0].scatter(j, mse(fitA, trueA[j,simulation]), color=color)
             axes[1].scatter(j, mse(np.linalg.eigvals(fitA).reshape(1,fitA.shape[0]), np.linalg.eigvals(trueA[j,simulation]).reshape(1,fitA.shape[0])), color=color)
             axes[0].set_xticks(j_values, J_possibility_title[j_values])
             axes[1].set_xticks(j_values, J_possibility_title[j_values])
@@ -277,4 +277,4 @@ def plot_relationship_W_J(axes, fitW, J, j_values=[0,1]):
         axes[1].set_ylabel('projection of first left singular vector W')
 
 plot_relationship_W_J(axes, fitW, J, j_values=j_values)
-plt.savefig(f'figures/N={N}_K={K}_figure=6_plot_relationship_W_J', bbox_inches='tight', dpi=300)
+plt.savefig(f'figures/N={N}_K={K}_figure=7_plot_relationship_W_J', bbox_inches='tight', dpi=300)
