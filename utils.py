@@ -11,7 +11,7 @@ def generate_eigenvalues(K):
     i = 0
     # generate random number in square:
     while i < K:
-        x, y = np.random.uniform(0, 1, 2)
+        x, y = np.random.uniform(-1, 1, 2)
         if K % 2 == 1 and i == 0:
             eigenvalues.append(x + 0j)
             i += 1
@@ -22,14 +22,14 @@ def generate_eigenvalues(K):
     return np.array(eigenvalues)
 
 
-def generate_dynamics_A(eigenvalues):
+def generate_dynamics_A(eigenvalues, normal=True, distr='normal'):
     '''
     generate dynamics matrix A with real entries that has a given set of eigenvalues (where complex eigs appear in conjugate pairs)
 
     eigenvectors: np array
         columns are eigenvectors
     '''
-    n_eig = eigenvalues.shape[0]
+    K = eigenvalues.shape[0]
 
     # # old way of generating random A (leads to potential large norms and non-normality)
     # comp_A = scipy.linalg.companion(np.poly((eigenvalues))) # companion matrix from characteristic polynomial
@@ -38,7 +38,7 @@ def generate_dynamics_A(eigenvalues):
     # P = np.random.rand(K,K) # uniform (0,1)
     # trueA = np.linalg.inv(P)  @ comp_A @ P # similarity
 
-    if n_eig == 1:
+    if K == 1:
         if np.imag(eigenvalues[0])!=0:
             raise Exception('Single eigenvalue should be real')
         else:
@@ -46,11 +46,17 @@ def generate_dynamics_A(eigenvalues):
             A[0,0] = np.real(eigenvalues[0])
     else:
         # generating normal A with real entries
-        D = np.zeros((n_eig, n_eig)) # real matrix that has eigenvalues of the given set
+        D = np.zeros((K, K)) # real matrix that has eigenvalues of the given set
         i = 0
-        while i < n_eig:
+        while i < K:
             # check if conjugate pairs
-            if np.real(eigenvalues[i]) == np.real(eigenvalues[i+1]) and np.imag(eigenvalues[i]) == -np.imag(eigenvalues[i+1]): 
+            if i == K - 1: # it must be real since it did not have a pair to skip together with
+                if np.imag(eigenvalues[i])==0:
+                    D[i,i] = np.real(eigenvalues[i])
+                    i += 1
+                else:
+                    raise Exception('Last eigenvalue does not have a pair and is not real')
+            elif np.real(eigenvalues[i]) == np.real(eigenvalues[i+1]) and np.imag(eigenvalues[i]) == -np.imag(eigenvalues[i+1]): 
                 D[i,i]= np.real(eigenvalues[i])
                 D[i+1,i+1]= np.real(eigenvalues[i])
                 D[i,i+1]= np.imag(eigenvalues[i])
@@ -63,10 +69,53 @@ def generate_dynamics_A(eigenvalues):
             else:
                 raise Exception('Eigenvalues do not have conjugate pairs in right order')
         
-        S = np.random.normal(0, 1, (n_eig, n_eig))
-        Q, R = np.linalg.qr(S)
-        Q = Q @ np.diag(np.sign(np.diag(R)))
-        A = Q @ D @ Q.T
+        if normal == True:
+            S = np.random.normal(0, 1, (K, K))
+            Q, R = np.linalg.qr(S)
+            Q = Q @ np.diag(np.sign(np.diag(R)))
+            A = Q @ D @ Q.T
+        else:
+            # add values on off diagonal of D to increase non-normality
+            num_off_diag = np.random.uniform(0,1) 
+            # to get up to maximum number of potential off diagonal terms
+            if K % 2 == 0: 
+                num_off_diag = num_off_diag * K * (K-2) / 2
+            else:
+                num_off_diag = num_off_diag * (K-1) * (K-1) / 2
+            num_off_diag = int(num_off_diag) + 1
+            ind_off_diag = np.random.uniform(0,1, (num_off_diag+2*K, 2)) * K
+            ind_off_diag = ind_off_diag.astype(int)
+            ind_off_diag.sort(axis=1) # to make sure upper triangular terms
+            count_off_diag = 0
+            i = 0
+            while count_off_diag < num_off_diag and i < num_off_diag+2*K:
+                if D[ind_off_diag[i,0],ind_off_diag[i,1]] == 0:
+                    if distr == 'normal':
+                        D[ind_off_diag[i,0],ind_off_diag[i,1]] = np.random.normal(0, np.sqrt(1/K))
+                    elif distr == 'uniform':
+                        D[ind_off_diag[i,0],ind_off_diag[i,1]] = np.sin(np.pi * np.random.uniform(-1, 1)) / np.sqrt(1/K)
+                    elif distr == 'cauchy':
+                        D[ind_off_diag[i,0],ind_off_diag[i,1]] = np.clip(np.random.standard_cauchy(),-2,2) / np.sqrt(1/K)
+                    elif distr == 'beta':
+                        D[ind_off_diag[i,0],ind_off_diag[i,1]] = (2 * np.random.beta(0.5, 2) - 1) / np.sqrt(1/K)
+                    else:
+                        raise Exception ('Distribution is not from the accepted group')
+                    
+                    count_off_diag += 1
+                i += 1
+
+            S = np.random.normal(0, 1, (K, K))
+            Q, R = np.linalg.qr(S)
+            Q = Q @ np.diag(np.sign(np.diag(R)))
+            A = Q @ D @ Q.T
+    
+    # check eigenvalues are matched
+    if set(np.round(eigenvalues,5)) != set(np.round(np.linalg.eigvals(A),5)):
+        raise Exception ('Eigenvalues of A do not match given set')
+    
+    # norm_A = np.linalg.norm(A)
+    # nonnormality_A = np.linalg.norm(A @ A.T - A.T @ A)
+    
     return A
 
 def build_dynamics_matrix_A(W, J):
@@ -113,5 +162,17 @@ def covariance_alignment(v, J, B):
     cov_J = proj_J @ proj_J.T
     
     return np.trace(cov_J) / np.trace(cov_network), np.trace(cov_PCA)/np.trace(cov_network)
+
+def check_unstable(W):
+     
+    eig = np.linalg.eigvals(W) 
+    eig_norms = norm_complex_scalar(eig)
+
+    if len(np.argwhere(eig_norms > 1)) > 0:
+        n_unstable = len(np.argwhere(eig_norms > 1))
+        return True, n_unstable
+    else:
+        return False, 0
+
 
 
