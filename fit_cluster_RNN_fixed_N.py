@@ -29,7 +29,7 @@ D = 30
 sparsity = 0.25
 U = 200
 T = 100
-zeta_alpha_beta_gamma_list = [(10**i,1,1,10**(i-2)) for i in list(np.arange(-1.5,0.5,0.25))]
+zeta_alpha_beta_gamma_list = [(10**i,1,1,10**(i-2.5)) for i in list(np.arange(-1.5,0.5,0.25))]
 J_possibilities = []
 
 # # Case 0 - normal J with orthogonality imposed (QR)
@@ -82,7 +82,8 @@ for i in range(len(J_possibilities)):
     ecll, ll, lossW, w, b, s, mu0, Q0, C_, d, R = RNN.fit_EM(true_y, init_w, true_b, true_s, true_mu0, true_Q0, true_C_, true_d, true_R, alpha=10, beta=10, max_iter=50)
     
     fitW = RNN.build_full_weight_matrix(w)
-    if check_unstable(fitW) == False:
+    unstable, n_unstable = check_unstable(fitW)
+    if unstable == False: # stable 
         v = RNN.generate_network_activity(U, T, fitW, b, s, mu0, Q0)
         # print('generated network activity')
     else:
