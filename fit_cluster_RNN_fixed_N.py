@@ -88,5 +88,5 @@ for i in range(len(J_possibilities)):
     else:
         v = np.zeros((1))
 
-    np.savez(f'models/N={N}_K={K}_parameters_simulation_{simulation}_J_possibility_{i}', ecll=ecll, ll=ll, initW0=initW0, initW =initW, loss_W = loss_W, w_all = w_all, lossW=lossW, w=w, b=b, s=s, mu0=mu0, Q0=Q0, C_=C_, d=d, R=R, J=J, true_x=true_x, true_y=true_y, trueA=trueA, true_b=true_b, true_s=true_s, true_mu0=true_mu0, true_Q0=true_Q0, true_C_=true_C_, true_d=true_d, true_R=true_R, v=v)
+    np.savez(f'models/N={N}_K={K}_parameters_simulation_{simulation}_J_possibility_{i}', ecll=ecll, ll=ll, initW0=initW0, initW =initW, loss_W = loss_W, w_all = w_all, lossW=lossW, fitW=fitW, b=b, s=s, mu0=mu0, Q0=Q0, C_=C_, d=d, R=R, J=J, true_x=true_x, true_y=true_y, trueA=trueA, true_b=true_b, true_s=true_s, true_mu0=true_mu0, true_Q0=true_Q0, true_C_=true_C_, true_d=true_d, true_R=true_R, v=v)
     
