@@ -12,7 +12,7 @@ import os
 
 df = pd.DataFrame(columns=['K','simulation']) # in total z=0,299 
 z = 0 
-for K in [1,2,3,5,15,25]:
+for K in [15,25]:#[1,2,3,5,15,25]:
     for simulation in range(50):
         df.loc[z, 'K'] = K
         df.loc[z, 'simulation'] = simulation
