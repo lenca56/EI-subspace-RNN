@@ -89,11 +89,13 @@ class EI_subspace_RNN():
 
         JpJ = np.linalg.pinv(self.J) @ self.J
         for iter in range(50):
-            # to satisfy low-dim dynamics constraint
-            W0 = JpJ @ W0 @ JpJ + (np.eye(self.N) - JpJ) @ W0 @ (np.eye(self.N) - JpJ)
+            if zeta_alpha_beta_gamma_list[0][1] != 0: # alpha
+                # to satisfy low-dim dynamics constraint
+                W0 = JpJ @ W0 @ JpJ + (np.eye(self.N) - JpJ) @ W0 @ (np.eye(self.N) - JpJ)
 
-            # to satisfy E-I balance 
-            W0 = W0 - W0 @ np.ones((self.N,1)) @ np.ones((1, self.N)) / self.N
+            if zeta_alpha_beta_gamma_list[0][2] != 0: # alpha
+                # to satisfy E-I balance 
+                W0 = W0 - W0 @ np.ones((self.N,1)) @ np.ones((1, self.N)) / self.N
 
             # to keep only active weights & Dale's law
             w0 = np.abs(self.get_nonzero_weight_vector(W0))
@@ -331,8 +333,8 @@ class EI_subspace_RNN():
         Q0 = np.mean(cov, axis=0)[0] + 1/U * M_first - mu0 @ mu0.T
 
         # updates observation parameters
-        if np.linalg.cond(M1_T) > 10 ** 10:
-            print('bad C')
+        # if np.linalg.cond(M1_T) > 10 ** 10:
+        #     print('bad C')
         # C_ = (Y1 @ M1.T - T * U * Y_tilda) @ np.linalg.inv(M1 @ M1.T - T * U * M1_T)
         C_ = (Y_tilda - d @ M1.T) @ np.linalg.inv(M1_T)
         d = 1/(T*U) * (Y1 - C_ @ M1)
@@ -351,8 +353,8 @@ class EI_subspace_RNN():
 
         R = 1/(T*U) * (Y2 + T * U * d @ d.T - d @ Y1.T - Y1 @ d.T - Y_tilda @ C_.T - C_ @ Y_tilda.T + d @ M1.T @ C_.T + C_ @ M1 @ d.T + C_ @ M1_T @ C_.T)
         eigenvalues = np.linalg.eigvalsh(R)  # Compute eigenvalues (optimized for symmetric matrices)
-        if np.all(eigenvalues >= 0) == False:
-            print('bad R')
+        # if np.all(eigenvalues >= 0) == False:
+        #     print('bad R')
 
         # updates dynamics parameters
         b = {0:'', 1:''}
