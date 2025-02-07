@@ -19,18 +19,18 @@ for K in [1,2,3,5,10]:#[1,2,3,5,15,25]:
         df.loc[z, 'simulation'] = simulation
         z += 1 
 
-idx = 100 #int(os.environ["SLURM_ARRAY_TASK_ID"])
+idx = int(os.environ["SLURM_ARRAY_TASK_ID"])
 K = df.loc[idx, 'K']
 # ei = df.loc[idx, 'ei']
 simulation = df.loc[idx, 'simulation']
 
-N_e = 50 #100
+N_e = 100
 N_i = N_e
 N = N_e + N_i
 D = 20
 sparsity = 0.25
-U = 2 #25 #0
-T = 10 #100
+U = 250
+T = 100
 max_iter = 10
 J_possibilities = []
 
@@ -60,7 +60,7 @@ J_possibilities.append(J)
 # Case 3 - uniform J
 J = np.random.uniform(0, 1, (N,N))
 # J, _ = np.linalg.qr(J)  # QR decomposition, Q is the orthogonal matrix
-J = J[:K,:] /np.sqrt(N)
+J = J[:K,:] / np.sqrt(N)
 J_possibilities.append(J)
 
 # generate dynamics (either normal or non-normal)
@@ -71,7 +71,7 @@ else:
     trueA = generate_dynamics_A(eigenvalues, normal=False) 
 
 for ei in [0,1,2,3]:
-    print(f'ei = {ei}')
+    # print(f'ei = {ei}')
 
     if ei == 0:
         zeta_alpha_beta_gamma_list = [(10**i,1,1,10**(i-2.5)) for i in list(np.arange(-1,0.5,0.25))]
@@ -83,11 +83,9 @@ for ei in [0,1,2,3]:
         zeta_alpha_beta_gamma_list = [(10**i,0,0,10**(i-2.5)) for i in list(np.arange(-1,0.5,0.25))]
 
     for i in range(len(J_possibilities)):
-        print(i)
+        # print(i)
 
         J = J_possibilities[i]
-        # pseudo-inverse (J * J_inv = identity, but J_inv * J is not)
-        J_pinv = np.linalg.pinv(J) 
         RNN = EI_subspace_RNN.EI_subspace_RNN(N_e, N_i, sparsity, J, seed=1)
         
         initW0, initW, loss_W, w_all = RNN.generate_or_initialize_weights_from_dynamics_LDS(A_target=trueA, R=0.85, zeta_alpha_beta_gamma_list = zeta_alpha_beta_gamma_list)
