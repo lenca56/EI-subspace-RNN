@@ -170,26 +170,30 @@ class EI_subspace_RNN():
         R: D x D numpy array
             covariance matrix of Gaussian observation noise
         '''
-        s = 1
+        s = np.random.uniform(0.5, 1.5, 1)
 
-        b1 = np.random.normal(0, 1, K)
-        b1 = b1/(b1@b1)
-        b1 = b1.reshape((K,1))
-
-        b2 = np.random.normal(0, 1, K)
-        b2 = b2/(b2@b2)
-        b2 = b2.reshape((K,1))
+        if K == 1:
+            b1 = np.random.uniform(0.75, 1.25, 1)
+            b2 = np.random.uniform(0.75, 1.25, 1)
+        else:
+            # normalize for input to have norm 1
+            b1 = np.random.normal(0, 1, K)
+            b1 = b1/np.linalg.norm(b1)
+            b1 = b1.reshape((K,1))
+            b2 = np.random.normal(0, 1, K)
+            b2 = b2/np.linalg.norm(b2)
+            b2 = b2.reshape((K,1))
         b = {0: b1, 1:b2}
 
-        C_ = np.random.normal(2, 1, (D,K))
-        d = np.random.normal(3, 1, (D,1))
+        C_ = np.random.normal(1, 2, (D,K))
+        d = np.random.normal(2, 1, (D,1))
 
         mu0 = np.random.normal(0, 0.1, (K,1))
         Q0 = np.random.normal(0.3, 0.1, (K, K))
         Q0 = np.dot(Q0, Q0.T) # to make P.S.D
         Q0 = 0.5 * (Q0 + Q0.T) # to make symmetric
 
-        R = np.random.normal(0.25, 0.25, (D, D))
+        R = np.random.normal(0.25, 0.5, (D, D))
         R = np.dot(R, R.T)
         R = 0.5 * (R + R.T)
         

@@ -122,7 +122,11 @@ def build_dynamics_matrix_A(W, J):
     return J @ W @ np.linalg.pinv(J)
 
 def mse(z, true_z):
-    return np.trace((z-true_z) @ (z-true_z).T)
+    '''
+    mean squared error = 1/datapoints * sum (a-a*)^2
+    '''
+    n = z.shape[0] * z.shape[1]
+    return 1/n * np.trace((z-true_z) @ (z-true_z).T)
 
 def angle_vectors(v1, v2):
     # potentially complex vectors v1 and v2
