@@ -19,18 +19,18 @@ for K in [1,2,3,5,10]:#[1,2,3,5,15,25]:
         df.loc[z, 'simulation'] = simulation
         z += 1 
 
-idx = 0 #int(os.environ["SLURM_ARRAY_TASK_ID"])
+idx = 100 #int(os.environ["SLURM_ARRAY_TASK_ID"])
 K = df.loc[idx, 'K']
 # ei = df.loc[idx, 'ei']
 simulation = df.loc[idx, 'simulation']
 
-N_e = 100
+N_e = 50 #100
 N_i = N_e
 N = N_e + N_i
 D = 20
 sparsity = 0.25
-U = 25 #0
-T = 100
+U = 2 #25 #0
+T = 10 #100
 max_iter = 10
 J_possibilities = []
 
@@ -60,7 +60,7 @@ J_possibilities.append(J)
 # Case 3 - uniform J
 J = np.random.uniform(0, 1, (N,N))
 # J, _ = np.linalg.qr(J)  # QR decomposition, Q is the orthogonal matrix
-J = J[:K,:] / 1/np.sqrt(N)
+J = J[:K,:] /np.sqrt(N)
 J_possibilities.append(J)
 
 # generate dynamics (either normal or non-normal)
@@ -96,6 +96,7 @@ for ei in [0,1,2,3]:
 
         true_b, true_s, true_mu0, true_Q0, true_C_, true_d, true_R = RNN.generate_parameters(D, K)
         true_x, true_y = RNN.generate_latents_and_observations(U, T, trueA, true_b, true_s, true_mu0, true_Q0, true_C_, true_d, true_R)
+        
         if ei == 0:
             ecll, ll, lossW, w, b, s, mu0, Q0, C_, d, R = RNN.fit_EM(true_y, init_w, true_b, true_s, true_mu0, true_Q0, true_C_, true_d, true_R, alpha=10, beta=10, max_iter=max_iter)
         elif ei == 1:

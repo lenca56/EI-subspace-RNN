@@ -173,16 +173,16 @@ class EI_subspace_RNN():
         s = np.random.uniform(0.5, 1.5, 1)
 
         if K == 1:
-            b1 = np.random.uniform(0.75, 1.25, 1)
-            b2 = np.random.uniform(0.75, 1.25, 1)
+            b1 = np.random.uniform(0.75, 1.25, 1).reshape((1,1))
+            b2 = np.random.uniform(0.75, 1.25, 1).reshape((1,1))
         else:
-            # normalize for input to have norm 1
+            # normalize for input to have norm 1 for K>=2
             b1 = np.random.normal(0, 1, K)
-            b1 = b1/np.linalg.norm(b1)
             b1 = b1.reshape((K,1))
+            b1 = b1/np.linalg.norm(b1)
             b2 = np.random.normal(0, 1, K)
-            b2 = b2/np.linalg.norm(b2)
             b2 = b2.reshape((K,1))
+            b2 = b2/np.linalg.norm(b2)
         b = {0: b1, 1:b2}
 
         C_ = np.random.normal(1, 2, (D,K))
@@ -228,10 +228,11 @@ class EI_subspace_RNN():
         t_s = int(T/2)
         S = self.build_network_covariance(s)
         v = np.zeros((U, T, self.N, 1))
+        J_pinv = np.linalg.pinv(self.J)
         for u in range(U):
-            v[u, 0] = np.random.multivariate_normal((self.J.T @ mu0).flatten(), self.J.T @ Q0 @ self.J).reshape((self.N,1)) # works for J orthogonal
+            v[u, 0] = np.random.multivariate_normal((J_pinv @ mu0).flatten(), J_pinv @ Q0 @ J_pinv.T).reshape((self.N,1)) # works for J orthogonal
             for i in range(1,T):
-                v[u, i] = np.random.multivariate_normal((W @ v[u, i-1] + self.J.T @ b[i-1 >= t_s]).reshape((self.N)), S).reshape((self.N,1))
+                v[u, i] = np.random.multivariate_normal((W @ v[u, i-1] + J_pinv @ b[i-1 >= t_s]).reshape((self.N)), S).reshape((self.N,1))
                 
         return v
 
@@ -560,7 +561,7 @@ class EI_subspace_RNN():
         # marginal log likelihood 
         ecll = np.zeros((max_iter+1))
         ll = np.zeros((max_iter+1, U))
-        loss_W = np.zeros((max_iter+1, 3))
+        lossW = np.zeros((max_iter+1, 3))
 
         C_all = np.ma.empty((max_iter+1), dtype=object)
         d_all = np.ma.empty((max_iter+1), dtype=object)
@@ -587,7 +588,7 @@ class EI_subspace_RNN():
                 m[u], cov[u], cov_next[u] = self.Kalman_smoother_E_step(A, mu, mu_prior, V, V_prior)
         
             ecll[iter], _ = self.compute_ELBO(y, w, b, s, mu0, Q0, C_, d, R, m, cov, cov_next)
-            loss_W[iter,:] = self.check_loss_weights(w, b, s, m, cov, cov_next)
+            lossW[iter,0], lossW[iter,1], lossW[iter,2] = self.check_loss_weights(w, b, s, m, cov, cov_next)
 
             # # # checking - M-step separate just for one
             # _, _, _, _, _, _, R = self.closed_form_M_step(y, d, w, m, cov, cov_next)
@@ -613,10 +614,10 @@ class EI_subspace_RNN():
             # E-step
             mu, mu_prior, V, V_prior, ll[-1, u] = self.Kalman_filter_E_step(y[u], w, b, s, mu0, Q0, C_, d, R)
             m[u], cov[u], cov_next[u] = self.Kalman_smoother_E_step(A, mu, mu_prior, V, V_prior)
-        loss_W[-1,:] = self.check_loss_weights(w, b, s, m, cov, cov_next)
+        lossW[-1,0], lossW[-1,1], lossW[-1,2] = self.check_loss_weights(w, b, s, m, cov, cov_next)
         ecll[-1], _ = self.compute_ELBO(y, w, b, s, mu0, Q0, C_, d, R, m, cov, cov_next)
             
-        return ecll, ll, loss_W, w, b, s, mu0, Q0, C_, d, R #, C_all, d_all, R_all
+        return ecll, ll, lossW, w, b, s, mu0, Q0, C_, d, R 
 
 
 
