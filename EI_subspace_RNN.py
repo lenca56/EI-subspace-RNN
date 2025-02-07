@@ -297,7 +297,7 @@ class EI_subspace_RNN():
 
         return m, cov, cov_next
 
-    def closed_form_M_step(self, y, w, m, cov, cov_next):
+    def closed_form_M_step(self, y, d, w, m, cov, cov_next):
         ''' 
         closed-form updates for all parameters except the weights
         '''
@@ -330,12 +330,29 @@ class EI_subspace_RNN():
         mu0 = np.mean(m, axis=0)[0]
         Q0 = np.mean(cov, axis=0)[0] + 1/U * M_first - mu0 @ mu0.T
 
-        if np.linalg.cond(M1 @ M1.T - T * U * M1_T) > 10**12:
-            print('BAD')
         # updates observation parameters
-        C_ = (Y1 @ M1.T - T * U * Y_tilda) @ np.linalg.inv(M1 @ M1.T - T * U * M1_T)
+        if np.linalg.cond(M1_T) > 10 ** 10:
+            print('bad C')
+        # C_ = (Y1 @ M1.T - T * U * Y_tilda) @ np.linalg.inv(M1 @ M1.T - T * U * M1_T)
+        C_ = (Y_tilda - d @ M1.T) @ np.linalg.inv(M1_T)
         d = 1/(T*U) * (Y1 - C_ @ M1)
+
+        # R = np.zeros((y.shape[2], y.shape[2]))
+        # for u in range(U):
+        #     for t in range(T):
+        #         residual = y[u, t] - d  # Fix: Center the observations
+        #         E_zt = m[u, t]  # Smoothed expectation of latent variable
+        #         E_zt_ztT = cov[u, t] + np.outer(m[u, t], m[u, t])  # E[z_n z_n^T]
+        #         R += (np.outer(residual, residual)  
+        #             - C_ @ np.outer(E_zt, residual)  
+        #             - np.outer(residual, E_zt) @ C_.T  
+        #             + C_ @ E_zt_ztT @ C_.T)  
+        # R /= (T * U)  # Normalize
+
         R = 1/(T*U) * (Y2 + T * U * d @ d.T - d @ Y1.T - Y1 @ d.T - Y_tilda @ C_.T - C_ @ Y_tilda.T + d @ M1.T @ C_.T + C_ @ M1 @ d.T + C_ @ M1_T @ C_.T)
+        eigenvalues = np.linalg.eigvalsh(R)  # Compute eigenvalues (optimized for symmetric matrices)
+        if np.all(eigenvalues >= 0) == False:
+            print('bad R')
 
         # updates dynamics parameters
         b = {0:'', 1:''}
@@ -547,6 +564,10 @@ class EI_subspace_RNN():
             # if iter % 10 == 0:
             #     print(iter)
 
+            C_all[iter] = C_
+            d_all[iter] = d
+            R_all[iter] = R
+
             W = self.build_full_weight_matrix(w)
             A = utils.build_dynamics_matrix_A(W, self.J)
 
@@ -563,14 +584,18 @@ class EI_subspace_RNN():
             loss_W[iter,:] = self.check_loss_weights(w, b, s, m, cov, cov_next)
 
             # # # checking - M-step separate just for one
-            # _, _, _, _, C_, d, R = self.closed_form_M_step(y, w, m, cov, cov_next)
+            # _, _, _, _, _, _, R = self.closed_form_M_step(y, d, w, m, cov, cov_next)
 
             # M-step
-            b, s, mu0, Q0, C_, d, R = self.closed_form_M_step(y, w, m, cov, cov_next)
+            b, s, mu0, Q0, C_, d, R = self.closed_form_M_step(y, d, w, m, cov, cov_next)
             opt_fun = lambda w_flattened: self.loss_weights_M_step(w_flattened, s, b, m, cov, cov_next, alpha=alpha, beta=beta)
             opt_grad = lambda w_flattened: self.gradient_weights_M_step(w_flattened, s, b, m, cov, cov_next, alpha=alpha, beta=beta)
             bounds = [(0, np.inf)] * init_w.shape[0]
             w = minimize(opt_fun, w.flatten(), jac=opt_grad, method='L-BFGS-B', bounds=bounds).x 
+        
+        C_all[max_iter] = C_
+        d_all[max_iter] = d
+        R_all[max_iter] = R
 
         # compute loss and ecll and ll after last iteration
         W = self.build_full_weight_matrix(w)
@@ -585,7 +610,7 @@ class EI_subspace_RNN():
         loss_W[-1,:] = self.check_loss_weights(w, b, s, m, cov, cov_next)
         ecll[-1], _ = self.compute_ELBO(y, w, b, s, mu0, Q0, C_, d, R, m, cov, cov_next)
             
-        return ecll, ll, loss_W, w, b, s, mu0, Q0, C_, d, R
+        return ecll, ll, loss_W, w, b, s, mu0, Q0, C_, d, R, C_all, d_all, R_all
 
 
 

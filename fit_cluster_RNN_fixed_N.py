@@ -10,16 +10,19 @@ import matplotlib.pyplot as plt
 import sys
 import os
 
-df = pd.DataFrame(columns=['K','simulation']) # in total z=0,299 
+df = pd.DataFrame(columns=['K','simulation','ei']) # in total z=0,299 
 z = 0 
 for K in [1,2,3,5]:#[1,2,3,5,15,25]:
-    for simulation in range(50):
-        df.loc[z, 'K'] = K
-        df.loc[z, 'simulation'] = simulation
-        z += 1 
+    for ei in [0,1,2,3]:
+        for simulation in range(30):
+            df.loc[z, 'K'] = K
+            df.loc[z, 'ei'] = ei
+            df.loc[z, 'simulation'] = simulation
+            z += 1 
 
 idx = int(os.environ["SLURM_ARRAY_TASK_ID"])
 K = df.loc[idx, 'K']
+ei = df.loc[idx, 'ei']
 simulation = df.loc[idx, 'simulation']
 
 N_e = 100
@@ -27,8 +30,8 @@ N_i = N_e
 N = N_e + N_i
 D = 30
 sparsity = 0.25
-U = 200
-T = 100
+U = 500
+T = 200
 zeta_alpha_beta_gamma_list = [(10**i,1,1,10**(i-2.5)) for i in list(np.arange(-1.5,0.5,0.25))]
 J_possibilities = []
 
@@ -40,13 +43,13 @@ J_possibilities = []
 
 # Case 1 - normal J with no orthogonality imposed
 J = np.random.normal(0, 1/np.sqrt(N), (N,N))
-# J, _ = np.linalg.qr(J)  # QR decomposition, Q is the orthogonal matrix
+J, _ = np.linalg.qr(J)  # QR decomposition, Q is the orthogonal matrix
 J = J[:K,:]
 J_possibilities.append(J)
 
 # Case 2 - J normal but (Kth dimension is co-activation pattern)
 J = np.random.normal(0, 1/np.sqrt(N), (N,N))
-# J, _ = np.linalg.qr(J)  # QR decomposition, Q is the orthogonal matrix
+J, _ = np.linalg.qr(J)  # QR decomposition, Q is the orthogonal matrix
 if K > 1:
     J = J[:K,:]
     J[K-1,:] = 1/np.sqrt(N)
@@ -57,7 +60,7 @@ J_possibilities.append(J)
 
 # Case 3 - uniform J
 J = np.random.uniform(0, 1, (N,N))
-# J, _ = np.linalg.qr(J)  # QR decomposition, Q is the orthogonal matrix
+J, _ = np.linalg.qr(J)  # QR decomposition, Q is the orthogonal matrix
 J = J[:K,:] / 1/np.sqrt(N)
 J_possibilities.append(J)
 
@@ -79,7 +82,14 @@ for i in range(len(J_possibilities)):
 
     true_b, true_s, true_mu0, true_Q0, true_C_, true_d, true_R = RNN.generate_parameters(D, K)
     true_x, true_y = RNN.generate_latents_and_observations(U, T, trueA, true_b, true_s, true_mu0, true_Q0, true_C_, true_d, true_R)
-    ecll, ll, lossW, w, b, s, mu0, Q0, C_, d, R = RNN.fit_EM(true_y, init_w, true_b, true_s, true_mu0, true_Q0, true_C_, true_d, true_R, alpha=10, beta=10, max_iter=50)
+    if ei == 0:
+        ecll, ll, lossW, w, b, s, mu0, Q0, C_, d, R = RNN.fit_EM(true_y, init_w, true_b, true_s, true_mu0, true_Q0, true_C_, true_d, true_R, alpha=10, beta=10, max_iter=25)
+    elif ei == 1:
+        ecll, ll, lossW, w, b, s, mu0, Q0, C_, d, R = RNN.fit_EM(true_y, init_w, true_b, true_s, true_mu0, true_Q0, true_C_, true_d, true_R, alpha=10, beta=0, max_iter=25)
+    elif ei == 2:
+        ecll, ll, lossW, w, b, s, mu0, Q0, C_, d, R = RNN.fit_EM(true_y, init_w, true_b, true_s, true_mu0, true_Q0, true_C_, true_d, true_R, alpha=0, beta=10, max_iter=25)
+    else:
+        ecll, ll, lossW, w, b, s, mu0, Q0, C_, d, R = RNN.fit_EM(true_y, init_w, true_b, true_s, true_mu0, true_Q0, true_C_, true_d, true_R, alpha=0, beta=0, max_iter=25)
     
     fitW = RNN.build_full_weight_matrix(w)
     unstable, n_unstable = check_unstable(fitW)
@@ -89,5 +99,5 @@ for i in range(len(J_possibilities)):
     else:
         v = np.zeros((1))
 
-    np.savez(f'models/N={N}_K={K}_parameters_simulation_{simulation}_J_possibility_{i}', ecll=ecll, ll=ll, initW0=initW0, initW =initW, loss_W = loss_W, w_all = w_all, lossW=lossW, fitW=fitW, b=b, s=s, mu0=mu0, Q0=Q0, C_=C_, d=d, R=R, J=J, true_x=true_x, true_y=true_y, trueA=trueA, true_b=true_b, true_s=true_s, true_mu0=true_mu0, true_Q0=true_Q0, true_C_=true_C_, true_d=true_d, true_R=true_R, v=v)
+    np.savez(f'models/N={N}_K={K}_parameters_EI={ei}_simulation_{simulation}_J_possibility_{i}', ecll=ecll, ll=ll, initW0=initW0, initW =initW, loss_W = loss_W, w_all = w_all, lossW=lossW, fitW=fitW, b=b, s=s, mu0=mu0, Q0=Q0, C_=C_, d=d, R=R, J=J, true_x=true_x, true_y=true_y, trueA=trueA, true_b=true_b, true_s=true_s, true_mu0=true_mu0, true_Q0=true_Q0, true_C_=true_C_, true_d=true_d, true_R=true_R, v=v)
     

@@ -153,15 +153,23 @@ def projection_on_subspace(v,U):
 
 # TO CHECK!!!
 def covariance_alignment(v, J, B):
+    ''' 
+    B: N x K matrix
+    J: K x N matrix
+    '''
     # project network on low-dim PC space
-    cov_network = v.T @ v
-    proj_v = v @ B
-    cov_PCA = proj_v.T @ proj_v
+    cov_network = v.T @ v # variance of network activity
+    proj_v = B.T @ v.T # network activity projected on subspace B
+    cov_PCA = proj_v.T @ proj_v # covariance of network in subspace B
 
     proj_J = J @ v.T
-    cov_J = proj_J @ proj_J.T
+    cov_J = proj_J @ proj_J.T # covariance of network in subspace J
+
+    # covariance of J in subspace B
+    proj_J_B = B @ B.T @ J.T
+    cov_J_B = proj_J_B @ proj_J_B.T
     
-    return np.trace(cov_J) / np.trace(cov_network), np.trace(cov_PCA)/np.trace(cov_network)
+    return np.trace(cov_J) / np.trace(cov_network), np.trace(cov_PCA)/np.trace(cov_network), np.trace(cov_J_B)
 
 def check_unstable(W):
      
