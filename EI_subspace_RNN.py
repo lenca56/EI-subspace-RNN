@@ -610,7 +610,7 @@ class EI_subspace_RNN():
         loss_W[-1,:] = self.check_loss_weights(w, b, s, m, cov, cov_next)
         ecll[-1], _ = self.compute_ELBO(y, w, b, s, mu0, Q0, C_, d, R, m, cov, cov_next)
             
-        return ecll, ll, loss_W, w, b, s, mu0, Q0, C_, d, R, C_all, d_all, R_all
+        return ecll, ll, loss_W, w, b, s, mu0, Q0, C_, d, R #, C_all, d_all, R_all
 
 
 
