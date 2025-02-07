@@ -19,7 +19,7 @@ for K in [1,2,3,5,10]:#[1,2,3,5,15,25]:
         df.loc[z, 'simulation'] = simulation
         z += 1 
 
-idx = int(os.environ["SLURM_ARRAY_TASK_ID"])
+idx = 0 #int(os.environ["SLURM_ARRAY_TASK_ID"])
 K = df.loc[idx, 'K']
 # ei = df.loc[idx, 'ei']
 simulation = df.loc[idx, 'simulation']
@@ -29,7 +29,7 @@ N_i = N_e
 N = N_e + N_i
 D = 20
 sparsity = 0.25
-U = 250
+U = 25 #0
 T = 100
 max_iter = 10
 J_possibilities = []
@@ -71,6 +71,7 @@ else:
     trueA = generate_dynamics_A(eigenvalues, normal=False) 
 
 for ei in [0,1,2,3]:
+    print(f'ei = {ei}')
 
     if ei == 0:
         zeta_alpha_beta_gamma_list = [(10**i,1,1,10**(i-2.5)) for i in list(np.arange(-1,0.5,0.25))]
@@ -82,6 +83,7 @@ for ei in [0,1,2,3]:
         zeta_alpha_beta_gamma_list = [(10**i,0,0,10**(i-2.5)) for i in list(np.arange(-1,0.5,0.25))]
 
     for i in range(len(J_possibilities)):
+        print(i)
 
         J = J_possibilities[i]
         # pseudo-inverse (J * J_inv = identity, but J_inv * J is not)
