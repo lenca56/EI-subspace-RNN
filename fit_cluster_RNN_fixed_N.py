@@ -11,8 +11,8 @@ import sys
 import os
 
 df = pd.DataFrame(columns=['K','simulation']) # in total z=0,299 
-z = 0 
-for K in [1,2,3,5,10]:#[1,2,3,5,15,25]:
+z = 0
+for K in [3,5,10]:#[1,2,3,5,10]:
     for simulation in range(60):
         df.loc[z, 'K'] = K
         # df.loc[z, 'ei'] = ei
@@ -32,45 +32,43 @@ sparsity = 0.25
 U = 250
 T = 100
 max_iter = 10
-J_possibilities = []
 
-# # Case 0 - normal J with orthogonality imposed (QR)
+
+# J_possibilities = []
+
+# # Case 1 - normal J with no orthogonality imposed
 # J = np.random.normal(0, 1/np.sqrt(N), (N,N))
-# J, _ = np.linalg.qr(J)  # QR decomposition, Q is the orthogonal matrix
+# # J, _ = np.linalg.qr(J)  # QR decomposition, Q is the orthogonal matrix
 # J = J[:K,:]
 # J_possibilities.append(J)
 
-# Case 1 - normal J with no orthogonality imposed
-J = np.random.normal(0, 1/np.sqrt(N), (N,N))
-# J, _ = np.linalg.qr(J)  # QR decomposition, Q is the orthogonal matrix
-J = J[:K,:]
-J_possibilities.append(J)
+# # Case 2 - J normal but (Kth dimension is co-activation pattern)
+# J = np.random.normal(0, 1/np.sqrt(N), (N,N))
+# # J, _ = np.linalg.qr(J)  # QR decomposition, Q is the orthogonal matrix
+# if K > 1:
+#     J = J[:K,:]
+#     J[K-1,:] = 1/np.sqrt(N)
+# else:
+#     J = J[0,:].reshape((1,N))
+#     J[0,:] = 1/np.sqrt(N)
+# J_possibilities.append(J)
 
-# Case 2 - J normal but (Kth dimension is co-activation pattern)
-J = np.random.normal(0, 1/np.sqrt(N), (N,N))
-# J, _ = np.linalg.qr(J)  # QR decomposition, Q is the orthogonal matrix
-if K > 1:
-    J = J[:K,:]
-    J[K-1,:] = 1/np.sqrt(N)
-else:
-    J = J[0,:].reshape((1,N))
-    J[0,:] = 1/np.sqrt(N)
-J_possibilities.append(J)
+# # Case 3 - uniform J
+# J = np.random.uniform(0, 1, (N,N))
+# # J, _ = np.linalg.qr(J)  # QR decomposition, Q is the orthogonal matrix
+# J = J[:K,:] / np.sqrt(N)
+# J_possibilities.append(J)
 
-# Case 3 - uniform J
-J = np.random.uniform(0, 1, (N,N))
-# J, _ = np.linalg.qr(J)  # QR decomposition, Q is the orthogonal matrix
-J = J[:K,:] / np.sqrt(N)
-J_possibilities.append(J)
+# # generate dynamics (either normal or non-normal)
+# eigenvalues = generate_eigenvalues(K)
+# if simulation < 10:
+#     trueA = generate_dynamics_A(eigenvalues, normal=True) 
+# else:
+#     trueA = generate_dynamics_A(eigenvalues, normal=False) 
 
-# generate dynamics (either normal or non-normal)
-eigenvalues = generate_eigenvalues(K)
-if simulation < 10:
-    trueA = generate_dynamics_A(eigenvalues, normal=True) 
-else:
-    trueA = generate_dynamics_A(eigenvalues, normal=False) 
+trueA = np.load(f'models/N={N}_K={K}/EI=0_simulation_{simulation}_J_possibility_0.npz', allow_pickle=True)['trueA']
 
-for ei in [0,1,2,3]:
+for ei in [2,3]:#[0,1,2,3]:
     # print(f'ei = {ei}')
 
     if ei == 0:
@@ -82,10 +80,11 @@ for ei in [0,1,2,3]:
     else:
         zeta_alpha_beta_gamma_list = [(10**i,0,0,10**(i-2.5)) for i in list(np.arange(-1,0.5,0.25))]
 
-    for i in range(len(J_possibilities)):
+    for i in range(3): #range(len(J_possibilities)):
         # print(i)
 
-        J = J_possibilities[i]
+        # J = J_possibilities[i]
+        J = np.load(f'models/N={N}_K={K}/EI=0_simulation_{simulation}_J_possibility_{i}.npz', allow_pickle=True)['J']
         RNN = EI_subspace_RNN.EI_subspace_RNN(N_e, N_i, sparsity, J, seed=1)
         
         initW0, initW, loss_W, w_all = RNN.generate_or_initialize_weights_from_dynamics_LDS(A_target=trueA, R=0.85, zeta_alpha_beta_gamma_list = zeta_alpha_beta_gamma_list)

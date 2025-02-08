@@ -230,7 +230,7 @@ class EI_subspace_RNN():
         v = np.zeros((U, T, self.N, 1))
         J_pinv = np.linalg.pinv(self.J)
         for u in range(U):
-            v[u, 0] = np.random.multivariate_normal((J_pinv @ mu0).flatten(), J_pinv @ Q0 @ J_pinv.T).reshape((self.N,1)) # works for J orthogonal
+            v[u, 0] = np.random.multivariate_normal((J_pinv @ mu0).flatten(), J_pinv @ Q0 @ J_pinv.T).reshape((self.N,1)) 
             for i in range(1,T):
                 v[u, i] = np.random.multivariate_normal((W @ v[u, i-1] + J_pinv @ b[i-1 >= t_s]).reshape((self.N)), S).reshape((self.N,1))
                 
