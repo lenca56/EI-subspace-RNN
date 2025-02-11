@@ -52,23 +52,25 @@ class EI_subspace_RNN():
             elif self.w_ind_unravel[ind,1] >= self.N_e: # inhibitory cell
                 self.w_ind_neg.append(self.w_ind[ind])
 
-    def build_full_weight_matrix(self, w):
+    def build_full_weight_matrix(self, w, Dale_law=1):
         W = np.zeros((self.N,self.N))
         if w.shape[0] != self.N_weights:
             raise Exception('Values of weights do not match in length with non-zero indices of matrix weights')
         for ind in range(self.N_weights):
-            if self.w_ind[ind] in self.w_ind_pos: # excitatory cell
-                W[self.w_ind_unravel[ind,0], self.w_ind_unravel[ind,1]] = w[ind]
-            elif self.w_ind[ind] in self.w_ind_neg: # inhibitory cell
-                W[self.w_ind_unravel[ind,0], self.w_ind_unravel[ind,1]] = - w[ind]
-            else:
-                raise Exception('Indices of non-zero values go beyond possible shape')
+            if Dale_law == 1: # Dale's law needs to be respected
+                if self.w_ind[ind] in self.w_ind_pos: # excitatory cell
+                    W[self.w_ind_unravel[ind,0], self.w_ind_unravel[ind,1]] = w[ind]
+                elif self.w_ind[ind] in self.w_ind_neg: # inhibitory cell
+                    W[self.w_ind_unravel[ind,0], self.w_ind_unravel[ind,1]] = - w[ind]
+                else:
+                    raise Exception('Indices of non-zero values go beyond possible shape')
+            elif Dale_law == 0:
+                W[self.w_ind_unravel[ind,0], self.w_ind_unravel[ind,1]] = w[ind] # no E-I constraints
         return W
     
-    def generate_stable_weights(self, R=0.85):
+    def generate_stable_weights(self, R=0.85, Dale_law=1):
         ''' 
         like in Hannequin et al 2012
-        See with Lea if more needs to be done
 
         R:
             spectral radius 
@@ -76,30 +78,37 @@ class EI_subspace_RNN():
         prod = self.sparsity * (1-self.sparsity)
         w0 = R / np.sqrt(prod)
         w = np.zeros((self.N_weights, 1))
-        w[:] = w0 / np.sqrt(self.N)
+        if Dale_law == 1: # w is all positive and EI enforced when building W
+            w[:] = w0 / np.sqrt(self.N)
+        elif Dale_law == 0:
+            w[:] = w0 / np.sqrt(self.N)
+            w = np.random.choice([-1, 1], size=w.shape) * w
         return w
     
-    def generate_or_initialize_weights_from_dynamics_LDS(self, A_target, R=0.85, zeta_alpha_beta_gamma_list = [(1,1,1,0)]):
+    def generate_or_initialize_weights_from_dynamics_LDS(self, A_target, R=0.85, zeta_alpha_beta_gamma_list = [(1,1,1,0)], Dale_law=1):
 
         # ADD TOLERANCE TO STOP WHEN ITERATING
 
         # step 1 like in Hannequin et al 2012
-        w0 = self.generate_stable_weights(R=R) 
-        W0 = self.build_full_weight_matrix(w0)
+        w0 = self.generate_stable_weights(R=R, Dale_law=Dale_law) 
+        W0 = self.build_full_weight_matrix(w0, Dale_law=Dale_law)
 
         JpJ = np.linalg.pinv(self.J) @ self.J
         for iter in range(50):
-            if zeta_alpha_beta_gamma_list[0][1] != 0: # alpha
+            if zeta_alpha_beta_gamma_list[0][1] != 0: # alpha != 0
                 # to satisfy low-dim dynamics constraint
                 W0 = JpJ @ W0 @ JpJ + (np.eye(self.N) - JpJ) @ W0 @ (np.eye(self.N) - JpJ)
 
-            if zeta_alpha_beta_gamma_list[0][2] != 0: # alpha
+            if zeta_alpha_beta_gamma_list[0][2] != 0: # beta != 0
                 # to satisfy E-I balance 
                 W0 = W0 - W0 @ np.ones((self.N,1)) @ np.ones((1, self.N)) / self.N
 
             # to keep only active weights & Dale's law
-            w0 = np.abs(self.get_nonzero_weight_vector(W0))
-            W0 = self.build_full_weight_matrix(w0)
+            if Dale_law == 1:
+                w0 = np.abs(self.get_nonzero_weight_vector(W0, Dale_law=Dale_law))
+            else:
+                w0 = self.get_nonzero_weight_vector(W0, Dale_law=Dale_law)
+            W0 = self.build_full_weight_matrix(w0, Dale_law=Dale_law)
 
             # print(np.linalg.norm(J @ W0 @ (np.eye(N)-JpJ))) # checked
             # print(np.linalg.norm(W0 @ np.ones((N,1))))
@@ -113,26 +122,32 @@ class EI_subspace_RNN():
             alpha = zeta_alpha_beta_gamma_list[ind][1]
             beta = zeta_alpha_beta_gamma_list[ind][2]
             gamma = zeta_alpha_beta_gamma_list[ind][3]
-            loss_W[ind, :] = self.check_loss_weights_LDS(w_old.flatten(), A_target)
-            opt_fun = lambda w_flattened: self.loss_weights_target_LDS(w_flattened, A_target, zeta, alpha, beta, gamma)
-            opt_grad = lambda w_flattened: self.gradient_weights_target_LDS(w_flattened, A_target, zeta, alpha, beta, gamma)
-            bounds = [(0, np.inf)] * w0.shape[0]
+            loss_W[ind, :] = self.check_loss_weights_LDS(w_old.flatten(), A_target, Dale_law=Dale_law)
+            opt_fun = lambda w_flattened: self.loss_weights_target_LDS(w_flattened, A_target, zeta, alpha, beta, gamma, Dale_law=Dale_law)
+            opt_grad = lambda w_flattened: self.gradient_weights_target_LDS(w_flattened, A_target, zeta, alpha, beta, gamma, Dale_law=Dale_law)
+            if Dale_law == 1:
+                bounds = [(0, None)] * w0.shape[0]
+            elif Dale_law == 0:
+                bounds = [(None, None)] * w0.shape[0]
             w = minimize(opt_fun, w_old.flatten(), jac=opt_grad, method='L-BFGS-B', bounds=bounds).x  
             w_old = np.copy(w)
             w_all[ind, :] = np.copy(w)
         
-        loss_W[-1, :] = self.check_loss_weights_LDS(w.flatten(), A_target)
-        W = self.build_full_weight_matrix(w)
+        loss_W[-1, :] = self.check_loss_weights_LDS(w.flatten(), A_target, Dale_law=Dale_law)
+        W = self.build_full_weight_matrix(w, Dale_law=Dale_law)
 
         return W0, W, loss_W, w_all 
     
-    def get_nonzero_weight_vector(self, W):
+    def get_nonzero_weight_vector(self, W, Dale_law=1):
         w = np.zeros((self.N_weights, 1))
         for ind in range(self.N_weights):
-            if self.w_ind[ind] in self.w_ind_pos: # excitatory cell
+            if Dale_law == 1:
+                if self.w_ind[ind] in self.w_ind_pos: # excitatory cell
+                    w[ind] = W[self.w_ind_unravel[ind,0], self.w_ind_unravel[ind,1]] 
+                elif self.w_ind[ind] in self.w_ind_neg: # inhibitory cell
+                    w[ind] = - W[self.w_ind_unravel[ind,0], self.w_ind_unravel[ind,1]]
+            else:
                 w[ind] = W[self.w_ind_unravel[ind,0], self.w_ind_unravel[ind,1]] 
-            elif self.w_ind[ind] in self.w_ind_neg: # inhibitory cell
-                w[ind] = - W[self.w_ind_unravel[ind,0], self.w_ind_unravel[ind,1]]
         return w
     
     def build_network_covariance(self, s):
@@ -236,12 +251,11 @@ class EI_subspace_RNN():
                 
         return v
 
-    def Kalman_filter_E_step(self, y, w, b, s, mu0, Q0, C_, d, R):
+    def Kalman_filter_E_step(self, y, W, b, s, mu0, Q0, C_, d, R):
         ''' 
         for each trial individually
         '''
 
-        W = self.build_full_weight_matrix(w)
         A = utils.build_dynamics_matrix_A(W, self.J)
         Q = self.build_dynamics_covariance(s)
         T = y.shape[0]
@@ -304,11 +318,10 @@ class EI_subspace_RNN():
 
         return m, cov, cov_next
 
-    def closed_form_M_step(self, y, d, w, m, cov, cov_next):
+    def closed_form_M_step(self, y, d, W, m, cov, cov_next):
         ''' 
         closed-form updates for all parameters except the weights
         '''
-        W = self.build_full_weight_matrix(w)
         A = utils.build_dynamics_matrix_A(W, self.J)
         U = y.shape[0]
         T = y.shape[1]
@@ -377,13 +390,13 @@ class EI_subspace_RNN():
 
         return b, s, mu0, Q0, C_, d, R
     
-    def loss_weights_target_LDS(self, w_flattened, A_target, zeta=1, alpha=1, beta=1, gamma=0):
+    def loss_weights_target_LDS(self, w_flattened, A_target, zeta=1, alpha=1, beta=1, gamma=0, Dale_law=1):
         ''' 
         for weight initialization procedure
 
         '''
     
-        W = self.build_full_weight_matrix(w_flattened.reshape((self.N_weights, 1)))
+        W = self.build_full_weight_matrix(w_flattened.reshape((self.N_weights, 1)), Dale_law=Dale_law)
         A = utils.build_dynamics_matrix_A(W, self.J)
         res = A - A_target
         Jpinv_aux = self. J @ W @ (np.identity((self.N)) - np.linalg.pinv(self.J) @ self.J)
@@ -395,13 +408,13 @@ class EI_subspace_RNN():
 
         return loss_W[0,0] # to get scalar from 1 x 1 array
     
-    def gradient_weights_target_LDS(self, w_flattened, A_target, zeta=1, alpha=1, beta=1, gamma=0):
+    def gradient_weights_target_LDS(self, w_flattened, A_target, zeta=1, alpha=1, beta=1, gamma=0, Dale_law=1):
         ''' 
         for weight initialization procedure
         
         '''
         
-        W = self.build_full_weight_matrix(w_flattened.reshape((self.N_weights, 1)))
+        W = self.build_full_weight_matrix(w_flattened.reshape((self.N_weights, 1)), Dale_law=Dale_law)
         A = utils.build_dynamics_matrix_A(W, self.J)
         res = A - A_target
         Jpinv_aux = self.J @ W @ (np.identity((self.N)) - np.linalg.pinv(self.J) @ self.J)
@@ -411,14 +424,14 @@ class EI_subspace_RNN():
         grad_W = grad_W + beta * W @ np.ones((self.N,1)) @ np.ones((self.N,1)).T
         grad_W = grad_W + gamma * W
         
-        return self.get_nonzero_weight_vector(grad_W).flatten() # a sign switching has to happen again
+        return self.get_nonzero_weight_vector(grad_W, Dale_law=Dale_law).flatten() # a sign switching has to happen again
 
-    def loss_weights_M_step(self, w_flattened, s, b, m, cov, cov_next, alpha=1, beta=1):
+    def loss_weights_M_step(self, w_flattened, s, b, m, cov, cov_next, alpha=1, beta=1, Dale_law=1):
         '''
         gradient of loss function of weights to be minimized
         '''
         
-        W = self.build_full_weight_matrix(w_flattened)
+        W = self.build_full_weight_matrix(w_flattened, Dale_law=Dale_law)
         A = utils.build_dynamics_matrix_A(W, self.J)
 
         U = m.shape[0]
@@ -447,12 +460,12 @@ class EI_subspace_RNN():
         
         return loss_W[0,0]
     
-    def gradient_weights_M_step(self, w_flattened, s, b, m, cov, cov_next, alpha=1, beta=1):
+    def gradient_weights_M_step(self, w_flattened, s, b, m, cov, cov_next, alpha=1, beta=1, Dale_law=1):
         '''
         gradient of loss function of weights to be minimized
         '''
 
-        W = self.build_full_weight_matrix(w_flattened)
+        W = self.build_full_weight_matrix(w_flattened, Dale_law=Dale_law)
         A = utils.build_dynamics_matrix_A(W, self.J)
 
         U = m.shape[0]
@@ -474,11 +487,11 @@ class EI_subspace_RNN():
         grad_W = grad_W + alpha * self.J.T @ Jpinv_aux
         grad_W = grad_W + beta * W @ np.ones((self.N,1)) @ np.ones((self.N,1)).T
 
-        return self.get_nonzero_weight_vector(grad_W).flatten()
+        return self.get_nonzero_weight_vector(grad_W, Dale_law=Dale_law).flatten()
 
-    def check_loss_weights_LDS(self, w_flattened, A_target):
+    def check_loss_weights_LDS(self, w_flattened, A_target, Dale_law=1):
 
-        W = self.build_full_weight_matrix(w_flattened.reshape((self.N_weights, 1)))
+        W = self.build_full_weight_matrix(w_flattened.reshape((self.N_weights, 1)), Dale_law=Dale_law)
         A = utils.build_dynamics_matrix_A(W, self.J)
         res = A - A_target
         Jpinv_aux = self. J @ W @ (np.identity((self.N)) - np.linalg.pinv(self.J) @ self.J)
@@ -489,9 +502,9 @@ class EI_subspace_RNN():
 
         return loss1_W, loss2_W, loss3_W[0,0]
 
-    def check_loss_weights(self, w_flattened, b, s, m, cov, cov_next):
+    def check_loss_weights(self, w_flattened, b, s, m, cov, cov_next, Dale_law=1):
 
-        W = self.build_full_weight_matrix(w_flattened.reshape((self.N_weights, 1)))
+        W = self.build_full_weight_matrix(w_flattened.reshape((self.N_weights, 1)), Dale_law=Dale_law)
         A = utils.build_dynamics_matrix_A(W, self.J)
 
         U = m.shape[0]
@@ -520,7 +533,7 @@ class EI_subspace_RNN():
 
         return loss1_W, loss2_W, loss3_W[0,0]
 
-    def compute_ELBO(self, y, w, b, s, mu0, Q0, C_, d, R, m, cov, cov_next):
+    def compute_ELBO(self, y, W, b, s, mu0, Q0, C_, d, R, m, cov, cov_next):
 
         U = m.shape[0]
         T = m.shape[1]
@@ -529,7 +542,6 @@ class EI_subspace_RNN():
         Q0_inv = np.linalg.inv(Q0)
         Q = self.build_dynamics_covariance(s)
         Q_inv = np.linalg.inv(Q)
-        W = self.build_full_weight_matrix(w)
         A = utils.build_dynamics_matrix_A(W, self.J)
 
         ecll = 0
@@ -545,7 +557,7 @@ class EI_subspace_RNN():
         elbo = ecll + 0
         return ecll, elbo
 
-    def fit_EM(self, y, init_w, init_b, init_s, init_mu0, init_Q0, init_C_, init_d, init_R, alpha=1, beta=1, max_iter=300):
+    def fit_EM(self, y, init_w, init_b, init_s, init_mu0, init_Q0, init_C_, init_d, init_R, alpha=1, beta=1, Dale_law=1, max_iter=300):
         
         U = y.shape[0]
         T = y.shape[1]
@@ -563,19 +575,11 @@ class EI_subspace_RNN():
         ll = np.zeros((max_iter+1, U))
         lossW = np.zeros((max_iter+1, 3))
 
-        C_all = np.ma.empty((max_iter+1), dtype=object)
-        d_all = np.ma.empty((max_iter+1), dtype=object)
-        R_all = np.ma.empty((max_iter+1), dtype=object)
-
         for iter in range(max_iter):
             # if iter % 10 == 0:
             #     print(iter)
 
-            C_all[iter] = C_
-            d_all[iter] = d
-            R_all[iter] = R
-
-            W = self.build_full_weight_matrix(w)
+            W = self.build_full_weight_matrix(w, Dale_law=Dale_law)
             A = utils.build_dynamics_matrix_A(W, self.J)
 
             m = np.zeros((U, T, self.K, 1))
@@ -584,38 +588,37 @@ class EI_subspace_RNN():
 
             for u in range(U): # iterate across all trials
                 # E-step
-                mu, mu_prior, V, V_prior, ll[iter, u] = self.Kalman_filter_E_step(y[u], w, b, s, mu0, Q0, C_, d, R)
+                mu, mu_prior, V, V_prior, ll[iter, u] = self.Kalman_filter_E_step(y[u], W, b, s, mu0, Q0, C_, d, R)
                 m[u], cov[u], cov_next[u] = self.Kalman_smoother_E_step(A, mu, mu_prior, V, V_prior)
         
-            ecll[iter], _ = self.compute_ELBO(y, w, b, s, mu0, Q0, C_, d, R, m, cov, cov_next)
-            lossW[iter,0], lossW[iter,1], lossW[iter,2] = self.check_loss_weights(w, b, s, m, cov, cov_next)
+            ecll[iter], _ = self.compute_ELBO(y, W, b, s, mu0, Q0, C_, d, R, m, cov, cov_next)
+            lossW[iter,0], lossW[iter,1], lossW[iter,2] = self.check_loss_weights(w, b, s, m, cov, cov_next, Dale_law=Dale_law)
 
             # # # checking - M-step separate just for one
             # _, _, _, _, _, _, R = self.closed_form_M_step(y, d, w, m, cov, cov_next)
 
             # M-step
-            b, s, mu0, Q0, C_, d, R = self.closed_form_M_step(y, d, w, m, cov, cov_next)
-            opt_fun = lambda w_flattened: self.loss_weights_M_step(w_flattened, s, b, m, cov, cov_next, alpha=alpha, beta=beta)
-            opt_grad = lambda w_flattened: self.gradient_weights_M_step(w_flattened, s, b, m, cov, cov_next, alpha=alpha, beta=beta)
-            bounds = [(0, np.inf)] * init_w.shape[0]
+            b, s, mu0, Q0, C_, d, R = self.closed_form_M_step(y, d, W, m, cov, cov_next)
+            opt_fun = lambda w_flattened: self.loss_weights_M_step(w_flattened, s, b, m, cov, cov_next, alpha=alpha, beta=beta, Dale_law=Dale_law)
+            opt_grad = lambda w_flattened: self.gradient_weights_M_step(w_flattened, s, b, m, cov, cov_next, alpha=alpha, beta=beta, Dale_law=Dale_law)
+            if Dale_law == 1:
+                bounds = [(0, None)] * init_w.shape[0]
+            else:
+                bounds = [(None, None)] * init_w.shape[0]
             w = minimize(opt_fun, w.flatten(), jac=opt_grad, method='L-BFGS-B', bounds=bounds).x 
-        
-        C_all[max_iter] = C_
-        d_all[max_iter] = d
-        R_all[max_iter] = R
 
         # compute loss and ecll and ll after last iteration
-        W = self.build_full_weight_matrix(w)
+        W = self.build_full_weight_matrix(w, Dale_law=Dale_law)
         A = utils.build_dynamics_matrix_A(W, self.J)
         m = np.zeros((U, T, self.K, 1))
         cov = np.zeros((U, T, self.K, self.K))
         cov_next = np.zeros((U, T-1, self.K, self.K))
         for u in range(U): # iterate across all trials
             # E-step
-            mu, mu_prior, V, V_prior, ll[-1, u] = self.Kalman_filter_E_step(y[u], w, b, s, mu0, Q0, C_, d, R)
+            mu, mu_prior, V, V_prior, ll[-1, u] = self.Kalman_filter_E_step(y[u], W, b, s, mu0, Q0, C_, d, R)
             m[u], cov[u], cov_next[u] = self.Kalman_smoother_E_step(A, mu, mu_prior, V, V_prior)
-        lossW[-1,0], lossW[-1,1], lossW[-1,2] = self.check_loss_weights(w, b, s, m, cov, cov_next)
-        ecll[-1], _ = self.compute_ELBO(y, w, b, s, mu0, Q0, C_, d, R, m, cov, cov_next)
+        lossW[-1,0], lossW[-1,1], lossW[-1,2] = self.check_loss_weights(w, b, s, m, cov, cov_next, Dale_law=Dale_law)
+        ecll[-1], _ = self.compute_ELBO(y, W, b, s, mu0, Q0, C_, d, R, m, cov, cov_next)
             
         return ecll, ll, lossW, w, b, s, mu0, Q0, C_, d, R 
 

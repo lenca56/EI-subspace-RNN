@@ -118,6 +118,43 @@ def generate_dynamics_A(eigenvalues, normal=True, distr='normal'):
     
     return A
 
+def generate_dale_matrix(K, g=0.85, frac_excitatory=0.5):
+    """
+    Generate an N x N random matrix A whose eigenvalues are (mostly) inside 
+    the unit circle and that obeys Dale's law (each column is either all positive 
+    or all negative). The assignment of excitatory columns is done randomly.
+    
+    Parameters
+    ----------
+    N : int
+        Dimension of the matrix.
+    g : float, optional
+        Gain parameter (with g < 1 to keep eigenvalues in the unit circle). Default is 0.9.
+    frac_excitatory : float, optional
+        Probability that a column is excitatory (i.e. nonnegative). Default is 0.8.
+    seed : int or None, optional
+        Random seed for reproducibility.
+    
+    Returns
+    -------
+    A : np.ndarray, shape (N, N)
+        The Dale‐compliant connectivity matrix.
+    """
+    
+    # Step 1. Generate a base matrix M with entries ~ N(0, g^2/N)
+    M = np.random.normal(loc=0, scale=g/np.sqrt(K), size=(K, K))
+    
+    # Step 2. Randomly assign each column to be excitatory (+1) or inhibitory (-1)
+    # Each column is excitatory with probability frac_excitatory.
+    sign_vec = np.where(np.random.rand(K) < frac_excitatory, 1, -1)
+    
+    # Step 3. Enforce Dale's law: For each column j, take absolute value and then multiply by the sign.
+    A = np.empty_like(M)
+    for j in range(K):
+        A[:, j] = sign_vec[j] * np.abs(M[:, j])
+    
+    return A
+
 def build_dynamics_matrix_A(W, J):
     return J @ W @ np.linalg.pinv(J)
 
@@ -145,7 +182,9 @@ def projection_on_vector(v,u):
     ''' 
     projecting v on u
     '''
-    return np.dot(u,v)/ (np.linalg.norm(u) ** 2) * u, np.dot(u,v)/ np.linalg.norm(u)
+    v_proj_u = np.vdot(u,v) / np.vdot(u,u) * u
+    norm_v_proj_u = np.linalg.norm(np.vdot(u,v)) / np.linalg.norm(u)
+    return v_proj_u, norm_v_proj_u
 
 def projection_on_subspace(v,U):
     ''' 
@@ -155,7 +194,6 @@ def projection_on_subspace(v,U):
     angle = angle_vectors(v, v_proj)
     return v_proj, angle
 
-# TO CHECK!!!
 def covariance_alignment(v, J, B):
     ''' 
     B: N x K matrix

@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH --job-name=fit_EI_subspace_RNN_fixed_N_no_Dale     # create a short name for your job
+#SBATCH --job-name=fit_EI_subspace_RNN_fixed_N_Aditi     # create a short name for your job
 #SBATCH --nodes=1                # node count
 #SBATCH --ntasks=1               # total number of tasks across all nodes
 #SBATCH --cpus-per-task=1        # cpu-cores per task (>1 if multi-threaded tasks)
 #SBATCH --mem-per-cpu=4G         # memory per cpu-core (4G is default)
-#SBATCH --time=18:59:59         # total run time limit (HH:MM:SS)
+#SBATCH --time=13:59:59         # total run time limit (HH:MM:SS)
 #SBATCH --array=0-299             # job array with index values 0, 1, ..., 10
 #SBATCH --mail-type=all          # send email on job start, end and fault
 #SBATCH --mail-user=cuturela@princeton.edu
@@ -17,4 +17,4 @@ module purge
 module load anaconda3/2023.3
 conda activate dglmhmm
 
-python fit_cluster_RNN_fixed_N_no_Dale.py
+python fit_cluster_RNN_fixed_N_Aditi.py
